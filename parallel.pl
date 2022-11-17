@@ -252,7 +252,11 @@ my $precision;
 my $os;
 my $pingcmd;
 my $sshcmd;
+my $sshbin = "ssh";
+my $sshopt;
 my $scpcmd;
+my $scpbin = "scp";
+my $scpopt;
 my $width;
 
 $|=1;
@@ -274,6 +278,11 @@ GetOptions(
 	'k=s' => \$ssh_keyfile,
 	's=s' => \$subst,
 	'W=i' => \$width,
+	'sshbin=s'	=> \$sshbin,
+	'sshopt=s'	=> \$sshopt,
+	'scpbin=s'	=> \$scpbin,
+	'scpopt=s'	=> \$scpopt,
+
 	'h' => \&usage,
 ) or (die $!);
 
@@ -285,8 +294,8 @@ if ($os eq 'SunOS') { $pingcmd = 'ping' }
 
 if ($ssh_keyfile) { $ssh_opts .= ' -i '.$ssh_keyfile }
 if ($connecttimeout > 0) { $ssh_opts .= " -o ConnectTimeout=".$connecttimeout }
-$sshcmd = "ssh -n $ssh_opts";
-$scpcmd = "scp $ssh_opts";
+$sshcmd = "$sshbin -n $ssh_opts";
+$scpcmd = "$scpbin $ssh_opts";
 if ($appendlog) { $mode = '>>' }
 
 if ($logdir) {
