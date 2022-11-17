@@ -3,7 +3,7 @@
 # 2008-2012 Jeremie Le Hen <jeremie@le-hen.org>
 #
 # Based on multremsh.pl:
-# 2004 Vincent Haverlant <vincent.haverlant@sgcib.com> 
+# 2004 Vincent Haverlant <vincent.haverlant@sgcib.com>
 # $Id: multremsh.pl 73 2007-11-12 13:12:23Z vhaverla $
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -31,10 +31,10 @@ use FindBin;
 use lib $FindBin::RealBin;
 
 # Put there variables here as they are used in usage().
-my $parallelism = 5; 
+my $parallelism = 20;
 my $pingtimeout = 5;
 my $scptimeout = 60;
-my $timeout = 300;
+my $timeout = 600;
 my $connecttimeout = 10;
 
 sub usage {
@@ -61,8 +61,8 @@ Usage:
 
 * Common options:
     -a           Append to log files.
-    -l <logdir>	 Logs everything in <logdir>/ (will be created)
-    -n <number>	 Number of commands to run simultaneously, default: $parallelism
+    -l <logdir>  Logs everything in <logdir>/ (will be created)
+    -n <number>  Number of commands to run simultaneously, default: $parallelism
     -q           Decrease verbosity (use once to show only errors).
     -t <seconds> Timeout when running a command, default: $timeout
     -T           Do not tag log lines with the host being processed
@@ -75,10 +75,15 @@ Usage:
     -k <keyfile> Use <keyfile> when using ssh
     -p <seconds> Ping timeout when testing host, disable with 0, default: $pingtimeout
     -S <seconds> Timeout when scp'ing a file, default: $scptimeout
-    -u <user>	 Use <user> when using ssh, default: \$LOGNAME
+    -u <user>    Use <user> when using ssh, default: \$LOGNAME
+
+    --sshbin <cmd>  ssh command to use
+    --sshopt <opts> ssh extra options to add
+    --scpbin <cmd>  scp command to use
+    --scpopt <opts> scp extra options to add
 
 * Local command options:
-    -s <string>	 Substitute <string> in the command string with the current
+    -s <string>  Substitute <string> in the command string with the current
                  hostname, default: %ARG%
 
 * Notes:
@@ -237,24 +242,24 @@ my $maxoutputlevel = 0;
 my $hosttag = 1;
 my $appendlog = 0;
 my $summary = 1;
-my $ssh_user = $ENV{'LOGNAME'};
-my $ssh_keyfile;
 my $subst = $ENV{'SUBST'} ? quotemeta ($ENV{'SUBST'}) : '\%ARG\%';
 my $logdir = '';
 my $loghandle;
 my $outhandle;
 my $failfile;
-my $ssh_opts = '-o BatchMode=yes -o StrictHostKeyChecking=no -o PasswordAuthentication=no -o NumberOfPasswordPrompts=0';
 my $mode = '>';
 my $precision;
 my $os;
 my $pingcmd;
-my $sshcmd;
-my $sshbin = "ssh";
-my $sshopt;
-my $scpcmd;
-my $scpbin = "scp";
-my $scpopt;
+my $ssh_cmd;
+my $ssh_user = $ENV{'LOGNAME'};
+my $ssh_bin = "ssh";
+my $ssh_opts = '-o BatchMode=yes -o StrictHostKeyChecking=no -o PasswordAuthentication=no -o NumberOfPasswordPrompts=0';
+my $ssh_opts_extra;
+my $ssh_keyfile;
+my $scp_cmd;
+my $scp_bin = "scp";
+my $scp_opts_extra;
 my $width;
 
 $|=1;
@@ -271,15 +276,15 @@ GetOptions(
 	'p=i' => \$pingtimeout,
 	't=i' => \$timeout,
 	'S=i' => \$scptimeout,
-	'C=i' => \$connecttimeout,
 	'u=s' => \$ssh_user,
-	'k=s' => \$ssh_keyfile,
 	's=s' => \$subst,
 	'W=i' => \$width,
-	'sshbin=s'	=> \$sshbin,
-	'sshopt=s'	=> \$sshopt,
-	'scpbin=s'	=> \$scpbin,
-	'scpopt=s'	=> \$scpopt,
+	'C=i' => \$connecttimeout,
+	'k=s' => \$ssh_keyfile,
+	'sshbin=s' => \$ssh_bin,
+	'sshopt=s' => \$ssh_opts_extra,
+	'scpbin=s' => \$scp_bin,
+	'scpopt=s' => \$scp_opts_extra,
 
 	'h' => \&usage,
 ) or (die $!);
@@ -292,8 +297,12 @@ if ($os eq 'SunOS') { $pingcmd = 'ping' }
 
 if ($ssh_keyfile) { $ssh_opts .= ' -i '.$ssh_keyfile }
 if ($connecttimeout > 0) { $ssh_opts .= " -o ConnectTimeout=".$connecttimeout }
-$sshcmd = "$sshbin -n $ssh_opts";
-$scpcmd = "$scpbin $ssh_opts";
+$ssh_cmd = "$ssh_bin -n $ssh_opts";
+$scp_cmd = "$scp_bin $ssh_opts";
+
+if ($ssh_opts_extra) { $ssh_cmd .= " ".$ssh_opts_extra }
+if ($scp_opts_extra) { $scp_cmd .= " ".$scp_opts_extra }
+
 if ($appendlog) { $mode = '>>' }
 
 if ($logdir) {
@@ -650,7 +659,7 @@ sub dojob {
 
 		if (not $dir) { $dir = '.' }
 		logdetail($tag, "Pulling '$command' from $host into $dir/$localfile");
-		$result = timedrun($scptimeout, "$scpcmd $ssh_user\@$host:$command $dir/$localfile", $tag, "scp(1) \@$host");
+		$result = timedrun($scptimeout, "$scp_cmd $ssh_user\@$host:$command $dir/$localfile", $tag, "scp(1) \@$host");
 		$status = $result->[0];
 		if ($status != 0) {
 			$status = 999;
@@ -675,7 +684,7 @@ sub dojob {
 			$remotefile = "./$remotefile";
 		}
 		logdetail($tag, "Pushing '$localfile' to $host as '$remotefile'");
-		$result = timedrun($scptimeout, "$scpcmd $localfile $ssh_user\@$host:$remotefile", $tag, "scp(1) \@$host");
+		$result = timedrun($scptimeout, "$scp_cmd $localfile $ssh_user\@$host:$remotefile", $tag, "scp(1) \@$host");
 		$status = $result->[0];
 		if ($status != 0) {
 			$status = 999;
@@ -701,7 +710,7 @@ sub dojob {
 
 	$realcommand = escape($realcommand);
 	logdetail($tag, "Running command");
-	$result = timedrun($timeout, "$sshcmd $ssh_user\@$host $realcommand", $tag, "Command \@$host");
+	$result = timedrun($timeout, "$ssh_cmd $ssh_user\@$host $realcommand", $tag, "Command \@$host");
 	$status = $result->[0];
 	$duration = $result->[1];
 	$linecount = $result->[2];
