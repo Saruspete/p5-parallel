@@ -27,6 +27,9 @@
 use strict;
 use warnings;
 
+use FindBin;
+use lib $FindBin::RealBin;
+
 # Put there variables here as they are used in usage().
 my $parallelism = 5; 
 my $pingtimeout = 5;
@@ -224,13 +227,8 @@ use Errno qw(:POSIX);
 use IO::Pipe;
 use IO::Select;
 
-my $dirname;
-$dirname = $0;
-$dirname =~ s{\/?[^/]+$}{};
-if ($dirname eq '') { $dirname = '.' }
-unshift @INC, $dirname;
-if (not require Job::Parallel) { die "Cannot find Job::Parallel" }
-if (not require Job::Timed) { die "Cannot find Job::Timed" }
+use Job::Parallel;
+use Job::Timed;
 
 # Initialisation and default values
 my @argv0 = @ARGV;
